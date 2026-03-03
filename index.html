@@ -1282,25 +1282,46 @@ function sync(input, ids) {
 }
 
 // ── LOGO SWAP ─────────────────────────────────────────────
-function swapLogo(input) {
-  const file = input.files[0]; if (!file) return;
+// ── IMAGE COMPRESSION HELPER ──────────────────────────────
+// Resizes + compresses an image file to a base64 JPEG.
+// maxW/maxH: max pixel dimensions. quality: 0–1 JPEG quality.
+function compressImage(file, maxW, maxH, quality, callback) {
   const r = new FileReader();
   r.onload = e => {
-    const src = e.target.result;
+    const img = new Image();
+    img.onload = () => {
+      let w = img.width, h = img.height;
+      if (w > maxW || h > maxH) {
+        const ratio = Math.min(maxW / w, maxH / h);
+        w = Math.round(w * ratio);
+        h = Math.round(h * ratio);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      callback(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.src = e.target.result;
+  };
+  r.readAsDataURL(file);
+}
+
+function swapLogo(input) {
+  const file = input.files[0]; if (!file) return;
+  // Logo: 200×200 max, quality 0.82
+  compressImage(file, 200, 200, 0.82, src => {
     document.querySelectorAll('[id^="logo-"], .qc-logo img, .cq-logo img, .ig-pic-wrap img, .ig-avatar img, .ig-hl-ring img').forEach(el => { if (el.tagName === 'IMG') el.src = src; });
     document.getElementById('logo-hdr').src = src;
     const prev = document.getElementById('prev-logo');
     if (prev) { prev.src = src; prev.style.display = 'block'; }
-  };
-  r.readAsDataURL(file);
+  });
 }
 
 // ── PHOTO SWAP ────────────────────────────────────────────
 function swapPhoto(input, n) {
   const file = input.files[0]; if (!file) return;
-  const r = new FileReader();
-  r.onload = e => {
-    const src = e.target.result;
+  // Post photos: 900×900 max, quality 0.78 — keeps visual quality, stays well under 10KB each
+  compressImage(file, 900, 900, 0.78, src => {
     // Remove any video that was previously set on this post
     removeVideo(n);
     // Restore card-img aspect ratio to square (1:1)
@@ -1316,8 +1337,7 @@ function swapPhoto(input, n) {
     // Preview
     const prev = document.getElementById('prev-p' + n);
     if (prev) { prev.src = src; prev.style.display = 'block'; }
-  };
-  r.readAsDataURL(file);
+  });
 }
 
 // ── VIDEO SWAP ────────────────────────────────────────────
@@ -1716,7 +1736,7 @@ async function publishToClient() {
   const json = JSON.stringify(state);
   const sizeKB = (new Blob([json]).size / 1024).toFixed(1);
   if (parseFloat(sizeKB) > 95) {
-    showToast('Too large (' + sizeKB + 'KB) — photos are too big. Upload smaller images.', true);
+    showToast('Still too large (' + sizeKB + 'KB) — try uploading smaller/fewer photos, or remove some images first.', true);
     btn.classList.remove('saving');
     resetPublishBtn();
     return;
